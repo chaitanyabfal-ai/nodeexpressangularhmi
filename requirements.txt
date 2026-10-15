@@ -1,0 +1,11 @@
+# Python dependencies for building the FUXA documentation site.
+# The server/client runtimes are Node.js (see server/package.json and
+# client/package.json); this file covers the MkDocs toolchain only,
+# mirroring the CI install in .github/workflows/docs.yml.
+#
+# Usage:
+#   pip install -r requirements.txt
+#   mkdocs serve     # local preview at http://localhost:8000
+#   mkdocs build     # static site in site/
+mkdocs<2.0
+mkdocs-material

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FUXA Codebase and Project Architecture</title>
+<style>
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 10.5pt; color: #222; }
+  h1 { font-size: 22pt; color: #1a3a5c; border-bottom: 2px solid #1a3a5c; padding-bottom: 6px; }
+  h2 { font-size: 15pt; color: #1a3a5c; margin-top: 22px; page-break-after: avoid; }
+  h3 { font-size: 12pt; color: #2c5f8a; margin-top: 16px; page-break-after: avoid; }
+  h4 { font-size: 11pt; color: #444; margin-top: 12px; page-break-after: avoid; }
+  p, li { line-height: 1.45; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 9.5pt; background-color: #f0f2f4; }
+  pre { font-family: "DejaVu Sans Mono", monospace; font-size: 8.5pt; background-color: #f4f6f8; border: 1px solid #ccd4dc; padding: 8px; line-height: 1.3; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 9.5pt; }
+  th { background-color: #1a3a5c; color: #ffffff; text-align: left; padding: 5px 7px; border: 1px solid #1a3a5c; }
+  td { padding: 4px 7px; border: 1px solid #b8c4cf; vertical-align: top; }
+  tr:nth-child(even) td { background-color: #f0f4f8; }
+  .cover { text-align: center; margin-top: 180px; }
+  .cover h1 { border: none; font-size: 30pt; }
+  .meta { color: #555; font-size: 11pt; }
+  .pagebreak { page-break-before: always; }
+  .note { border-left: 4px solid #2c5f8a; padding: 6px 10px; background-color: #eef3f8; margin: 10px 0; }
+  ul { margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+<h1>FUXA — Codebase and Project Architecture</h1>
+<p class="meta">Web-based Process Visualization (SCADA / HMI / Dashboard)</p>
+<p class="meta">Repository: frangoteam/FUXA v1.3.5-2937 — deployment with the iPTran Leak Detection HMI</p>
+<p class="meta">Generated 15 October 2026 from the working tree at /home/bfa/fuxahmi/FUXA</p>
+<p class="meta">Scope: complete repository structure, server runtime, client application, data model, widget system, deployment and CI</p>
+</div>
+
+<h1 class="pagebreak">1. Executive Summary</h1>
+<p>FUXA is an open-source, full-stack SCADA/HMI platform. A <b>Node.js/Express server</b> acquires live process data
+from industrial devices (Modbus, OPC UA, S7, BACnet, MQTT and 13 more), historizes tag values into SQLite/InfluxDB/
+QuestDB/TDengine, exposes a secured REST API over HTTP, and pushes live values to a rich
+<b>Angular 18 single-page client</b> over Socket.IO/WebSocket. The client provides a drawing-style <b>Editor</b> in
+which operators compose SVG views, bind device tags to graphic elements and widgets, and configure alarms,
+notifications, schedulers, reports and recipes. The finished project is served to plant operators as a
+fullscreen HMI (Home), a simulation <b>Lab</b>, a kiosk mode, an Electron desktop app, and — in this fork — a
+browser-based <b>AR mode</b> and a custom <b>iPTran leak-detection schematic widget</b>.</p>
+
+<table>
+<tr><th>Dimension</th><th>Facts</th></tr>
+<tr><td>Codebase size</td><td>server: ~134 JS modules (excl. node_modules/dist), client: ~182 Angular components (client/src ~15 MB)</td></tr>
+<tr><td>Server stack</td><td>Node.js 18, Express 4, Socket.IO 4, sqlite3 5, InfluxDB clients, Node-RED 4 (optional), Winston logger, Mocha/Sinon tests</td></tr>
+<tr><td>Client stack</td><td>Angular 18 + Angular Material, RxJS, SVG.js/Raphael/Snap for gauges, ngx-translate, gridster, CodeMirror</td></tr>
+<tr><td>Packaging</td><td>Multi-stage Docker image (client build → server build → runtime), docker compose, Electron app, headless runtime</td></tr>
+<tr><td>Documentation</td><td>MkDocs (Material) site in docs/ (Python toolchain, see requirements.txt)</td></tr>
+<tr><td>CI</td><td>GitHub Actions: docker image builds (main/rc/release), docs deploy, Electron builds, headless packaging</td></tr>
+</table>
+
+<h1 class="pagebreak">2. Repository Top Level</h1>
+<pre>
+FUXA/
+├── compose.yml            Docker Compose for this deployment (bind mounts incl. ./widgets)
+├── Dockerfile             Multi-stage production image (client build → server build → runtime)
+├── runbook.md             Operational runbook for this deployment (start → configure → bind → test → stop)
+├── requirements.txt       Python deps: MkDocs + Material (documentation site only)
+├── mkdocs.yml             Docs site configuration (nav, Material theme)
+├── LICENSE, README.md, CONTRIBUTING.md, SECURITY.md
+├── docs/                  Operator/developer documentation (~30 HowTo pages, ar-mode.md design note)
+├── server/                Node.js backend + REST API + device drivers + DAQ storage (see §3)
+├── client/                Angular 18 editor/HMI frontend (see §4); client/dist = prebuilt bundle
+├── app/                   Desktop & headless packaging roots
+│   ├── electron/          Electron wrapper (main.js, settings UI, project selection, icons)
+│   └── headless/          headless-entry.js — server-only runtime without editor
+├── node-red/              node-red-contrib-fuxa — Node-RED palette nodes that talk to FUXA
+├── screenshot/            Marketing screenshots
+└── .github/workflows/     CI pipelines (docker_image, docker_rc, docker_release, docs, electron_latest, headless_packaging)
+</pre>
+
+<h2>2.1 Docker deployment layout (this machine)</h2>
+<p>The running instance is the stock <code>frangoteam/fuxa:latest</code> image with five host bind mounts;
+all project state survives container removal:</p>
+<table>
+<tr><th>Host path</th><th>Container path</th><th>Contents</th></tr>
+<tr><td>FUXA/appdata</td><td>server/_appdata</td><td>settings.js, mysettings.json, project.fuxap.db, users/alarms/apikeys/recipes/scheduler DBs, _upload_files</td></tr>
+<tr><td>FUXA/db</td><td>server/_db</td><td>DAQ history (per-device SQLite files + archive/), currentTagReadings.db</td></tr>
+<tr><td>FUXA/logs</td><td>server/_logs</td><td>Rotating server logs + api.log (Morgan)</td></tr>
+<tr><td>FUXA/images</td><td>server/_images</td><td>Image resources (Pipes, Tanks shape libraries)</td></tr>
+<tr><td>FUXA/widgets</td><td>server/_widgets</td><td>Widget library served to the editor (dynamicSVG group)</td></tr>
+</table>
+
+<h1 class="pagebreak">3. Server (server/)</h1>
+
+<h2>3.1 Boot sequence — main.js (683 lines)</h2>
+<ol>
+<li>Parse CLI args (<code>nopt</code>): <code>--port</code>, <code>--userDir</code>, <code>--env</code>; env <code>userDir</code>, <code>BASE_PATH</code>.</li>
+<li>Resolve workDir (<code>&lt;userDir&gt;/_appdata</code>), copy <code>settings.default.js</code> → <code>_appdata/settings.js</code> on first run,
+    merge missing fields when the version differs (deepMerge).</li>
+<li>Read user overrides <code>_appdata/mysettings.json</code> (language, uiPort, secure settings, smtp, daqstore,
+    alarms, logs, nodeRed, swagger…).</li>
+<li>Generate a random JWT secret if <code>secureEnabled</code> without <code>secretCode</code> (fail-safe).</li>
+<li>Create runtime directories: _appdata, _db, _reports, _upload_files, _images, _widgets, _webcam_snapshots, _logs.</li>
+<li>Create the HTTP(S) server with Express + Socket.IO (path = BASE_PATH + /socket.io, EIO3 compat).</li>
+<li>Optional <code>BASE_PATH</code> reverse-proxy support: rewrites &lt;base href&gt; and asset URLs in memory.</li>
+<li>Static routes: Angular shell routes (/, /home, /editor, /lab, /device, /view, /ar, …), <code>/resources</code>,
+    <code>/_images</code>, <code>/_widgets</code>, webcam snapshots (token-protected).</li>
+<li>Morgan request logging to <code>_logs/api.log</code> (level from settings), optional Swagger UI at /api-docs.</li>
+<li>Call <code>FUXA.init()</code> (fuxa.js) which initializes the runtime (§3.2) and mounts the API; on
+    <code>init-runtime-ok</code> (or a 60 s timeout) start listening on uiPort (default 1881).</li>
+<li>Webcam snapshot cleanup scheduled daily at 01:00 (node-schedule) when enabled.</li>
+<li>SIGINT handler stops the runtime cleanly; uncaughtException logger keeps the process alive.</li>
+</ol>
+
+<h2>3.2 Runtime core — server/runtime/</h2>
+<table>
+<tr><th>Module</th><th>Responsibility</th></tr>
+<tr><td>index.js</td><td>Runtime orchestrator: initializes and exposes every subsystem (devices, daqstorage, project, alarms, users, notifications, scheduler, scripts, plugins); handles Socket.IO subscriptions (viewsTagsSubscribe / tag value broadcast), and periodic retention checks.</td></tr>
+<tr><td>events.js</td><td>Minimal internal pub/sub used between subsystems (init-runtime-ok, access:login, tag changes).</td></tr>
+<tr><td>logger.js</td><td>Winston wrapper with per-run log file under _logs.</td></tr>
+<tr><td>utils.js</td><td>Shared helpers (deepMerge, retention windows, date formatting, guards).</td></tr>
+<tr><td>project/</td><td>Project persistence: prjstorage.js (project.fuxap.db with tables general/views/devices/devicesSecurity/texts/alarms/recipes/notifications/scripts/reports/locations/arMarkers), textstorage for multi-language texts.</td></tr>
+<tr><td>users/</td><td>usrstorage.js (users.fuxap.db, bcrypt-hashed passwords, roles/groups), token helper.</td></tr>
+<tr><td>apikeys/</td><td>apiKeysStorage.js — REST API keys for machine-to-machine access.</td></tr>
+<tr><td>alarms/</td><td>alarmstorage.js + alarm runtime: threshold/derived alarms from device tags, ack workflow, alarm history.</td></tr>
+<tr><td>notificator/</td><td>Alarm/notify storage and e-mail delivery via nodemailer (SMTP from settings).</td></tr>
+<tr><td>recipes/</td><td>Recipe storage and serving (batch recipes bound to view controls).</td></tr>
+<tr><td>scheduler/</td><td>Schedule storage; node-schedule jobs trigger scripts/reports.</td></tr>
+<tr><td>scripts/</td><td>User JS scripts storage and sandboxed execution (run on schedule/event).</td></tr>
+<tr><td>jobs/</td><td>Report generation engine: report.js (pdfmake with custom fonts in jobs/fonts), cleaner.js, helper/.</td></tr>
+<tr><td>plugins/</td><td>Plugin manager (§3.5): npm runtime installer, plugin registry, device driver swapping.</td></tr>
+</table>
+
+<h2>3.3 Device layer — server/runtime/devices/</h2>
+<p><b>device.js</b> implements a per-device state machine (INIT/IDLE, connect check every 5 s, polling interval
+default 3000 ms) and dispatches to a communication client by device type. Each driver module exports
+<code>create(data, logger, events, pluginManager, runtime)</code> and implements the client contract:
+connect, disconnect, isConnected, polling, load, getValue(s), setValue, bindAddDaq, getTagProperty,
+getStatus, lastReadTimestamp (+ optional browse for address discovery).</p>
+<table>
+<tr><th>Driver folder</th><th>Protocol / type</th><th>Notes</th></tr>
+<tr><td>modbus/</td><td>ModbusRTU / ModbusTCP</td><td>modbus-serial; class 0/1 read, writes</td></tr>
+<tr><td>opcua/</td><td>OPC UA</td><td>node-opcua; address-space browse, security policies</td></tr>
+<tr><td>s7/</td><td>SiemensS7</td><td>node-snap7 (optional native plugin)</td></tr>
+<tr><td>bacnet/</td><td>BACnet</td><td>node-bacnet</td></tr>
+<tr><td>mqtt/</td><td>MQTTclient</td><td>mqtt.js; topic browse, QoS, TLS</td></tr>
+<tr><td>httprequest/</td><td>WebAPI</td><td>REST polling (GET/POST), axios</td></tr>
+<tr><td>ethernetip/</td><td>EthernetIP</td><td>nodepccc (Allen-Bradley)</td></tr>
+<tr><td>omron-ethernetip/</td><td>OmronEthernetIP</td><td>omron-ethernet-ip</td></tr>
+<tr><td>melsec/</td><td>MELSEC</td><td>mcprotocol (Mitsubishi)</td></tr>
+<tr><td>adsclient/</td><td>ADSclient</td><td>ads-client (Beckhoff TwinCAT)</td></tr>
+<tr><td>odbc/</td><td>ODBC</td><td>Database device via unixodbc + table browse</td></tr>
+<tr><td>redis/</td><td>REDIS</td><td>Redis keys as tags</td></tr>
+<tr><td>fuxaserver/</td><td>FuxaServer</td><td>Internal simulation device (used by this deployment) and FUXA-to-FUXA bridge</td></tr>
+<tr><td>gpio/, webcam/, template/</td><td>GPIO, WebCam, (template)</td><td>Raspberry GPIO, snapshot capture; template = reference driver skeleton</td></tr>
+<tr><td>device-utils.js</td><td>—</td><td>tagDaqToSave (DAQ change/interval decision), tagValueCompose (scaling scripts)</td></tr>
+</table>
+<p class="note"><b>DAQ write path (as built today):</b> device polling → <code>addDaq(changedTags, name, id)</code>
+(bound in devices/index.js via <code>daqStorage.addDaqNode</code>) → storage sink. The SQLite sink inserts one row
+per tag per poll with a boolean “working” guard and <i>drops batches</i> under load (data-overload warning) —
+documented in the runbook as the current scalability limit (~1 Hz with DAQ).</p>
+
+<h2>3.4 Storage layer — server/runtime/storage/</h2>
+<table>
+<tr><th>Module</th><th>Role</th></tr>
+<tr><td>daqstorage.js</td><td>DAQ sink factory: per-device SQLite DaqNode, or a single shared sink for InfluxDB (1.8/2.x), TDengine, QuestDB; tag map resolution; retention checks.</td></tr>
+<tr><td>sqlite/index.js</td><td>Per-device DaqNode: daq-map_&lt;dev&gt;.db (tag map: mapid/id/name/type) + time-sliced daq-data_&lt;dev&gt;_&lt;timestamp&gt;.db (dt/id/value rows); hourly tokenization, archive/ folder rotation, retention deletion.</td></tr>
+<tr><td>sqlite/currentstorage.js</td><td>currentTagReadings.db — last value per tag, batched 5 s write queue (used for value restore on device reconnect).</td></tr>
+<tr><td>influxdb/, questdb/, tdengine/</td><td>External historian sinks selected via settings.daqstore.type (url/organization/bucket/token).</td></tr>
+<tr><td>calculator.js</td><td>Chart aggregation functions (min/max/avg/sum, interpolation, formats) over DAQ series.</td></tr>
+</table>
+
+<h2>3.5 Plugin system — server/runtime/plugins/</h2>
+<p>FUXA ships drivers as npm packages that are <i>installed at runtime</i> into an isolated package directory
+(<code>_pkg</code>): <b>npm-runtime-service.js</b> implements install/uninstall/list of npm packages outside the
+main node_modules; <b>index.js</b> keeps a registry (Plugin records: name/module/type/version/group) with groups
+<code>connection-device</code>, <code>connection-database</code>, <code>chart-report</code>, <code>service</code>
+(node-red). <code>device.loadPlugin(type, module)</code> hot-swaps the driver module for a device type.
+The editor Plugins page drives this via /api/plugins.</p>
+
+<h2>3.6 REST API — server/api/</h2>
+<p><b>index.js</b> mounts each group on Express with JWT auth (jwt-helper.js, x-access-token / refresh cookie),
+role checks and API rate limiting. Groups:</p>
+<table>
+<tr><th>Route group</th><th>Purpose</th></tr>
+<tr><td>auth/</td><td>/api/signin, /api/refresh, logout, token helpers, bcrypt user validation</td></tr>
+<tr><td>projects/</td><td>Load/save/export project JSON, settings disclosure guard (daqstore credentials never sent to client)</td></tr>
+<tr><td>daq/</td><td>Chart data queries: aggregated tag values over time ranges (calculator functions)</td></tr>
+<tr><td>alarms/</td><td>Alarm definitions, active alarms, ack, alarm history</td></tr>
+<tr><td>devices (+resources)/</td><td>Device CRUD, tags, connection status, browse; resource/image/widget galleries (GET /api/resources/widgets walks _widgets subfolders), uploads, webcam snapshots</td></tr>
+<tr><td>users/, apikeys/</td><td>User & role management, REST API keys</td></tr>
+<tr><td>recipes/, reports/, scheduler/, scripts/</td><td>Recipe, report (pdfmake), schedule and script management</td></tr>
+<tr><td>command/</td><td>Tag write commands (device.setValue)</td></tr>
+<tr><td>plugins/</td><td>Install/list/remove runtime npm plugins</td></tr>
+<tr><td>diagnose/</td><td>Server health/diagnostics endpoint</td></tr>
+</table>
+
+<h2>3.7 Integration and packaging</h2>
+<ul>
+<li><b>integrations/node-red/</b> — mounts Node-RED (when nodeRedEnabled) on the same HTTP server, with
+auth mode secure/legacy-open, isolated userDir and the node-red-contrib-fuxa palette nodes.</li>
+<li><b>server/dist/reports.service.js</b> — small TypeScript-compiled helper (tsconfig.json) for report rendering.</li>
+<li><b>server/test/</b> — Mocha + Sinon suites: api, authorization, devices, alarms, storage (QuestDB),
+notificator, plugins, recipes, help.</li>
+<li><b>envParams.js</b> — optional file injecting DEVICES (device list) from environment for headless boot.</li>
+<li><b>_images/</b> — shared shape libraries (Pipes, Tanks) served statically.</li>
+</ul>
+
+<h1 class="pagebreak">4. Client (client/) — Angular 18 Editor and HMI</h1>
+
+<h2>4.1 Toolchain and configuration</h2>
+<ul>
+<li>Angular CLI 18 (angular.json), configurations: production/demo/client; dev server on 4200 with
+proxy.conf.json → localhost:1881; bs-config.json for lite serving of dist.</li>
+<li>Dependencies: @angular/material (+cdk), ngx-translate (i18n in assets/i18n/*.json), angular-gridster2
+(kiosk/dashboards), angular2-draggable, @ctrl/ngx-codemirror (scripts), svg.js/Raphael/Snap
+(gauge rendering), chart.js, moment, ngx-matomo style theming, socket.io-client.</li>
+<li>client/dist — production bundle the server serves as the SPA shell.</li>
+</ul>
+
+<h2>4.2 Application skeleton — client/src/app/</h2>
+<table>
+<tr><th>Folder</th><th>Contents</th></tr>
+<tr><td>_models/</td><td>Typed domain objects: hmi.ts (Hmi/View/Items), device.ts, alarm.ts, apikey.ts, ar.ts (AR markers/cards), chart.ts, graph.ts, project.ts, recipe.ts, report.ts, script.ts, settings.ts, user.ts, plugin.ts, resources.ts, maps.ts, notification.ts, language.ts, client-access.ts</td></tr>
+<tr><td>_services/</td><td>app.service (Socket.IO client, tag subscriptions/broadcast), hmi.service (viewsTagsSubscribe, onVariableChanged), project.service (project state, view switching, save), settings, user/auth, device, resources, plugin, diagnose, heartbeat, data-converter, rcgi (remote CGI endpoints), toast-notifier, theme, my-file, maps-locations, apikeys, recipe, reports, script, language services</td></tr>
+<tr><td>_helpers/, _directives/, _config/</td><td>define.ts (huge constant catalog: control types, gauges, enums), utils, svg-utils (widget script processing/ID renaming), flyout/focus directives, config constants</td></tr>
+<tr><td>framework/, gui-helpers/, sidenav/, header/, paginator/, iframe/</td><td>App frame: top header with save/project menus, side navigation, flyout panels, iframe hosting, pagination helpers</td></tr>
+<tr><td>home/, view/, fuxa-view/, cards-view/, lab/</td><td>Runtime HMI: Home (view selection, kiosk), fullscreen View renderer, cards-view (gridster dashboards), Lab (view test bench with simulated tag tester — renders the editor’s last-selected view)</td></tr>
+<tr><td>editor/</td><td>The drawing workspace: canvas, drawing tools, element selection/transform, SVG properties (Interactivity/Property panels with varsToBind tag pickers), onboarding wizard; consumes widget placements via svgWidgetSelected (fetches SVG → localStorage → own_ctrl-image mode)</td></tr>
+<tr><td>device/, device-adapter/</td><td>Device/tag configuration UIs for all device types incl. browse dialogs, DAQ settings per tag, connection status chips</td></tr>
+<tr><td>gauges/</td><td>Gauge rendering framework shared by editor and runtime: gauge-base, controls/ (20 control families: value, html-chart, html-graph, html-table, html-image/widget host, html-button/switch/input/select, html-bag, html-iframe, html-video, html-recipe, html-scheduler, panel, pipe (animated pipe), slider, gauge-progress, gauge-semaphore), shapes/ (SVG shape library incl. Proc-Eng symbols), gauge-property/ (flex-variable tag binding, flex-widget-property for widget varsToBind)</td></tr>
+<tr><td>alarms/, notifications/</td><td>Alarm view, alarm list, ack UIs, notification lists</td></tr>
+<tr><td>users/, login/, auth.guard.ts</td><td>Sign-in page, user management, role guard for editor routes</td></tr>
+<tr><td>resources/</td><td>Resource galleries: lib-widgets (server widget library browser with placement selection), kiosk-widgets, image galleries</td></tr>
+<tr><td>scripts/, recipes/, reports/, scheduler (in sidenav), apikeys/, plugins/, language/, maps/, logs-view/, diagnose (help)</td><td>Feature management pages for their respective subsystems; language editor for i18n texts; maps locations</td></tr>
+<tr><td>tester/</td><td>Tag value simulator panel used by the Lab (setSignals on mapped gauges)</td></tr>
+<tr><td>integrations/node-red/</td><td>Node-RED flows management page (when nodeRedEnabled)</td></tr>
+<tr><td>ar/</td><td>AR mode (this fork): ar-view (fullscreen camera + BarcodeDetector marker detection → live tag cards) and ar-marker-list (marker CRUD backed by project arMarkers table)</td></tr>
+<tr><td>auth.guard, material.module, assets/</td><td>Route guard, Material module barrel, fonts, i18n, lib (SVG.js etc.), demo project</td></tr>
+</table>
+
+<h2>4.3 Routing map — app.routing.ts (26 routes)</h2>
+<pre>
+'' , /home, /home/:viewName          → HomeComponent            (operator HMI)
+/editor                              → EditorComponent         (AuthGuard)
+/lab                                 → LabComponent            (AuthGuard)
+/device, /rodevice (readonly)        → DeviceComponent         (AuthGuard)
+/view, /view/:viewName               → ViewComponent           (fullscreen runtime)
+/users, /userRoles                   → Users / UsersRoles      (AuthGuard)
+alarms, notifications, scripts, reports, recipes, apikeys,
+plugins, mapsLocations, languageTexts, nodeRedFlows, arMarkers  → list/management components
+/ar, /ar/:viewName?                 → ArViewComponent          (AR camera mode)
+</pre>
+
+<h2>4.4 Widget pipeline (client side)</h2>
+<p>Placement: Lib Widgets panel → <code>LibWidgetsService.widgetSelected(path)</code> → editor fetches the SVG,
+stores the content in <b>localStorage</b> keyed by the widget path, and switches to <code>own_ctrl-image</code>
+placement mode. Rendering (html-image component): the stored/saved <code>svgContent</code> is parsed,
+<b>scripts are extracted and processed</b> (SvgUtils.processWidget rewrites exported variable hooks and
+renames element IDs with a GUID to avoid DOM collisions), the sanitized SVG is injected, and the script is
+executed with a generated module. The 15 exported variables land in
+<code>property.varsToBind</code> where each row binds to device/tag via flex-widget-property. Tag updates
+arrive through Socket.IO and are pushed into the widget via <code>putValue(id, value)</code>; widget
+interactions call <code>postValue(id, value)</code> back to FUXA. Placed widgets <b>freeze their content at
+placement time</b> — new file revisions require re-placement or a new view (version-per-view convention).</p>
+
+<h1 class="pagebreak">5. Data Model and Persistence</h1>
+<table>
+<tr><th>Store</th><th>Engine</th><th>Schema / contents</th></tr>
+<tr><td>project.fuxap.db</td><td>SQLite (server/_appdata)</td><td>general (version), views (id, profile, items incl. placed widget svgContent + varsToBind), devices (id/name/type/property/tags with per-tag daq settings), devicesSecurity, texts, alarms, recipes, notifications, scripts, reports, locations, arMarkers</td></tr>
+<tr><td>users.fuxap.db</td><td>SQLite</td><td>Users with bcrypt hashes and role groups (default admin/123456)</td></tr>
+<tr><td>apikeys / alarms / recipes / scheduler .db</td><td>SQLite</td><td>API keys, alarm history, recipes, schedules</td></tr>
+<tr><td>daq-map_&lt;device&gt;.db</td><td>SQLite (server/_db)</td><td>Tag map: mapid ↔ tag id/name/type per device</td></tr>
+<tr><td>daq-data_&lt;device&gt;_&lt;yyyymmddHHMMSS&gt;.db</td><td>SQLite (server/_db, archive/)</td><td>Time series rows (dt, mapid, value); files tokenized per daqTokenizer hours, old files rotated into archive/ with time-range suffixes, retention cleanup removes archived files</td></tr>
+<tr><td>currentTagReadings.db</td><td>SQLite</td><td>Last value per tag (5 s batched queue) for reconnect restore</td></tr>
+<tr><td>External historians</td><td>InfluxDB 1.8/2.x, QuestDB, TDengine</td><td>Line-protocol writes; selected by settings.daqstore.type; credentials masked in API responses</td></tr>
+</table>
+
+<h1>6. Widget System and the iPTran Schematic</h1>
+<h3>6.1 FUXA dynamic SVG widget standard (docs/HowTo-Widgets.md)</h3>
+<ul>
+<li>Pure SVG + embedded <code>&lt;script&gt;</code>; bindable globals declared between
+<code>//!export-start</code>/<code>//!export-end</code>, named by type prefix: <code>_ps_</code> string,
+<code>_pn_</code> number, <code>_pb_</code> boolean, <code>_pc_</code> color.</li>
+<li>Inbound updates via <code>putValue(id, value)</code>; outbound commands via <code>postValue(id, value)</code>.</li>
+<li>Widgets using timers must self-destruct when removed (MutationObserver/element check).</li>
+<li>Editor lists widgets from subfolders of _widgets only (GET /api/resources/widgets, admin-gated in secure mode).</li>
+</ul>
+<h3>6.2 iPTran widget revisions (server/_widgets/dynamicSVG/ and widgets/dynamicSVG/)</h3>
+<table>
+<tr><th>File</th><th>Revision</th><th>Exported vars</th><th>Features</th></tr>
+<tr><td>iptran_schematic_v1.svg</td><td>v1</td><td>4 (_ps_)</td><td>Static station schematic: Kesinga → Lanjigarh pipeline, PT-01..04 only</td></tr>
+<tr><td>iptran_schematic_v2.svg</td><td>v2</td><td>15</td><td>Live flows/level, pump P-101/P-201 states, per-station comm dots, alarm-range coloring (PT 0.5–6 bar, flow 0–2000 m³/h, level 20–90%), click-to-command via postValue, iptran-* ID prefix</td></tr>
+<tr><td>iptran_schematic_v3.svg</td><td>v3</td><td>15 (same names)</td><td>Animated pipeline flow (CSS dash animation, speed ∝ flow), blinking alarm banner + SYSTEM NORMAL/N ALARMS chip, 40-sample sparklines per PT, pipeline load bar, live clock + LIVE/STALE (15 s) indicator, station dimming + LINK DOWN on comm loss, pump pulse on command, hover tooltips; 1 s interval with destroy-check</td></tr>
+<tr><td>iptran_schematic.svg</td><td>latest alias</td><td>—</td><td>Copy of newest revision for backward compatibility</td></tr>
+</table>
+<p>Deployment mapping (verified in project.fuxap.db): view <code>iPTran_Overview</code> (text mock),
+<code>iPTran_Schematic</code> (v2 widget, 13 tag bindings), <code>iPTran_Live</code> (v3 widget, same 13
+bindings; _cmd variables intentionally unbound). Bound tags: StationA/B/C_PT0x, StationA/B/C_FM*,
+StationB_LT01, PUMP_A/B_RUN, COMM_ONLINE on the FuxaServer simulation device.</p>
+
+<h1 class="pagebreak">7. Deployment, CI and Desktop Packaging</h1>
+<ul>
+<li><b>Dockerfile</b> — three stages: (1) client-builder: node:18-bookworm, npm install, ng build --configuration
+production; (2) server-builder: build-essential + libsqlite3-dev (+unixodbc via INSTALL_ODBC), npm install,
+optional node-snap7 (ARG NODE_SNAP); (3) runtime image carrying server + client/dist + node_modules.</li>
+<li><b>compose.yml (this deployment)</b> — image frangoteam/fuxa:latest, restart unless-stopped, five bind
+mounts (§2.1), port 1881:1881.</li>
+<li><b>GitHub Actions</b> — docker_image.yml / docker_rc.yml / docker_release.yml (image builds and registry
+push), docs.yml (MkDocs site deploy via pip install mkdocs<2.0 mkdocs-material), electron_latest.yml
+(desktop builds), headless_packaging.yml (server-only artifacts).</li>
+<li><b>Electron (app/electron)</b> — main.js bootstraps the FUXA server as a child process, settings and
+project-selection HTML dialogs; used for offline desktop installs.</li>
+<li><b>Headless (app/headless)</b> — headless-entry.js runs the server without the editor for edge/gateway boxes.</li>
+<li><b>Documentation site</b> — MkDocs Material; requirements.txt pins the Python toolchain.</li>
+</ul>
+
+<h1>8. Security Model</h1>
+<ul>
+<li>Optional <code>secureEnabled</code>: JWT access tokens (jsonwebtoken) with configurable expiry, optional
+HttpOnly refresh-cookie flow, bcrypt password hashes, role groups (admin/operators/guests) checked per API
+route and for the widget/image galleries.</li>
+<li>Rate limiting: generous API window (1000 req/5 min) and tighter auth window (100/5 min) via express-rate-limit.</li>
+<li>CORS allowlist (settings.allowedOrigins, wildcard patterns supported); BASE_PATH reverse-proxy support.</li>
+<li>Settings disclosure guard: daqstore URLs/credentials stripped from API responses (api/index.js).</li>
+<li>Snapshot route protected by token when security is on; webcam snapshots cleanup by retention.</li>
+</ul>
+
+<h1>9. Known Limits and Architectural Roadmap</h1>
+<p>Findings from the codebase review (full design in the repository notes):</p>
+<ol>
+<li><b>DAQ write path</b> — single INSERT per tag per poll with drop-on-overload; plan: in-process bounded
+batching queue (daq-queue.js) + transactional SQLite writes (WAL, prepared statements), preserving source
+timestamps (device-utils sets tag.timestamp already).</li>
+<li><b>Edge-to-cloud store-and-forward</b> — no offline buffer today; plan: SQLite spool (WAL ring buffer) +
+forwarder with exponential backoff, or a Fluent Bit tail adapter over JSON-lines outbox.</li>
+<li><b>Plugin architecture</b> — drivers are npm-runtime packages but the registry and device-type dispatch are
+hardcoded (device.js if/else, DaqStoreTypeEnum); plan: IProtocolPlugin/IDBPlugin interfaces + external
+plugins directory (fuxa.plugin.json manifests) so protocol/DB drivers drop in without core edits.</li>
+</ol>
+
+<h1 class="pagebreak">10. Annotated File Reference</h1>
+<pre>
+server/
+├── main.js                    entry point; settings merge; Express/Socket.IO wiring; static routes
+├── fuxa.js                    FUXA facade: init/start/stop, httpApi mount, version
+├── paths.js                   path constants
+├── envParams.js               env-provided device list (headless)
+├── settings.default.js        default settings (copied into _appdata on first run)
+├── tsconfig.json, dist/       small TS helper (reports.service.js)
+├── project.default.json / project.demo.fuxap    seed/demo projects
+├── api/                       REST route groups (auth, projects, daq, alarms, devices/resources,
+│                              users, apikeys, recipes, reports, scheduler, scripts, command,
+│                              plugins, diagnose) + jwt-helper, rate limits
+├── runtime/
+│   ├── index.js               runtime orchestrator; Socket.IO tag broadcast
+│   ├── events.js, logger.js, utils.js
+│   ├── devices/               device.js state machine + 17 driver folders + device-utils.js
+│   ├── storage/               daqstorage.js, sqlite/ (index, currentstorage), influxdb/,
+│   │                          questdb/, tdengine/, calculator.js
+│   ├── project/ alarms/ users/ apikeys/ notificator/ recipes/ scheduler/ scripts/ jobs/ plugins/
+├── integrations/node-red/     Node-RED mount + contrib nodes
+├── _widgets/dynamicSVG/       widget source of truth (iPTran v1/v2/v3 + README)
+├── _images/                   Pipes/Tanks shape libraries
+└── test/                      Mocha suites (api, authorization, devices, storage, plugins, …)
+
+client/
+├── package.json, angular.json, proxy.conf.json, bs-config.json
+├── e2e/                       end-to-end tests
+├── dist/                      production bundle served by the server
+└── src/app/
+    ├── app.module.ts, app.routing.ts, app.component.*, material.module.ts, auth.guard.ts
+    ├── _models/ _services/ _helpers/ _directives/ _config/
+    ├── home/ view/ fuxa-view/ cards-view/ lab/ tester/
+    ├── editor/ device/ device-adapter/ gauges/ (controls/, shapes/, gauge-property/, gauge-base/)
+    ├── header/ sidenav/ framework/ gui-helpers/ paginator/ iframe/ help/
+    ├── alarms/ notifications/ users/ login/ apikeys/ plugins/
+    ├── recipes/ reports/ scripts/ maps/ language/ logs-view/ resources/ (lib-widgets, kiosk-widgets)
+    ├── integrations/node-red/  ar/ (ar-view, ar-marker-list)
+    └── assets/ (i18n, fonts, images, lib, project.demo.fuxap)
+
+app/electron/                  desktop packaging (main.js, settings dialogs)
+app/headless/                  headless server entry
+node-red/node-red-contrib-fuxa Node-RED palette nodes for FUXA
+docs/                          ~30 operator HowTo pages + ar-mode.md + settings reference
+.github/workflows/             docker_image/rc/release, docs, electron_latest, headless_packaging
+</pre>
+
+<h2>Glossary</h2>
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>DAQ</td><td>Data acquisition — historization of tag values (SQLite/InfluxDB/QuestDB/TDengine)</td></tr>
+<tr><td>Tag</td><td>A single named process point (e.g. PT-01 pressure) on a device</td></tr>
+<tr><td>View / Item</td><td>An SVG canvas in a project; items are placed elements (shapes, gauges, widgets)</td></tr>
+<tr><td>varsToBind</td><td>Per-placed-widget list of exported SVG variables, each bindable to a device tag</td></tr>
+<tr><td>FuxaServer device</td><td>Built-in simulation/internal device used for commissioning without PLCs</td></tr>
+<tr><td>Lab / Tester</td><td>View test bench rendering the editor’s last-selected view with simulated tag values</td></tr>
+<tr><td>Widget (dynamic SVG)</td><td>SVG + script with _ps_/_pn_/_pb_ exported variables, driven by putValue/postValue</td></tr>
+<tr><td>PlantPAx style</td><td>High-performance HMI conventions (gray/limited palette, state colors, alarm ranges) used by the iPTran widget</td></tr>
+</table>
+
+</body>
+</html>

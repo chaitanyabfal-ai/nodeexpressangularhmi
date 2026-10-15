@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="100%" height="100%" style="background-color: #E0E0E0; font-family: Arial, sans-serif;">
+
+  <style>
+    .header-title { font-size: 24px; font-weight: bold; fill: #3F3F3F; }
+    .header-sub { font-size: 11px; fill: #64748b; }
+    .station-title { font-size: 14px; font-weight: bold; fill: #3F3F3F; text-anchor: middle; }
+    .station-sub { font-size: 10px; font-style: italic; fill: #64748b; text-anchor: middle; }
+    .label-title { font-size: 10px; font-weight: bold; fill: #3F3F3F; }
+    .label-desc { font-size: 9px; fill: #919191; }
+    .side-note { font-size: 10px; font-style: italic; fill: #64748b; text-anchor: middle; }
+    .plc-text { font-size: 11px; font-weight: bold; fill: #FFFFFF; text-anchor: middle; }
+    .data-val { font-size: 11px; font-weight: bold; fill: #475CA7; text-anchor: end; }
+    .data-unit { font-size: 8px; fill: #919191; }
+    .legend-text { font-size: 10px; fill: #3F3F3F; }
+  </style>
+
+  <!-- FUXA Export Script Hooks -->
+  <script>
+    //<![CDATA[
+    //!export-start
+    let _ps_stationA_pt = "0.00";
+    let _ps_stationB_pt2 = "0.00";
+    let _ps_stationB_pt3 = "0.00";
+    let _ps_stationC_pt = "0.00";
+    //!export-end
+
+    function putValue(id, value) {
+      if (id === '_ps_stationA_pt') {
+        _ps_stationA_pt = value;
+        document.getElementById('val-sta-a-pt').textContent = value;
+      } else if (id === '_ps_stationB_pt2') {
+        _ps_stationB_pt2 = value;
+        document.getElementById('val-sta-b-pt2').textContent = value;
+      } else if (id === '_ps_stationB_pt3') {
+        _ps_stationB_pt3 = value;
+        document.getElementById('val-sta-b-pt3').textContent = value;
+      } else if (id === '_ps_stationC_pt') {
+        _ps_stationC_pt = value;
+        document.getElementById('val-sta-c-pt').textContent = value;
+      }
+    }
+    //]]>
+  </script>
+
+  <!-- ================= HEADER SECTION ================= -->
+  <text x="20" y="28" class="header-title">iPTran Leak Detection System <tspan font-weight="normal" fill="#64748b">&#8212; Instrumentation &amp; Communication Schematic</tspan></text>
+  <text x="20" y="46" class="header-sub">Kesinga-Lanjigarh Water Pipeline | 28" MS | ~70 km | M/s Vedanta Aluminium Metal Ltd., Lanjigarh, Odisha</text>
+  <line x1="20" y1="56" x2="1180" y2="56" stroke="#D8D8D8" stroke-width="1" />
+
+  <!-- ================= CLOUD SERVER ================= -->
+  <rect x="460" y="66" width="280" height="55" rx="6" fill="#3F3F3F" stroke="#A0A0A4" stroke-width="1" />
+  <text x="600" y="88" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">iPTran Cloud Server</text>
+  <text x="600" y="106" font-size="11" fill="#93c5fd" text-anchor="middle">Analytics  &#8226;  Dashboard  &#8226;  Alerts</text>
+
+  <!-- ================= DASHED NETWORK LINES ================= -->
+  <path d="M 120 150 L 1080 150 M 120 150 L 120 200 M 600 121 L 600 200 M 1080 150 L 1080 200"
+        stroke="#A0A0A4" stroke-width="1" stroke-dasharray="4,4" fill="none" />
+  <text x="20" y="144" font-size="11" font-weight="bold" font-style="italic" fill="#3F3F3F">4G / LAN Communication Network</text>
+
+  <!-- ================= STATION A: KESINGA ================= -->
+  <rect x="40" y="200" width="160" height="30" rx="4" fill="#3F3F3F" />
+  <text x="120" y="219" class="plc-text">PLC-1 + Edge GSM Module</text>
+
+  <rect x="10" y="234" width="220" height="230" rx="6" fill="#E8E8E8" stroke="#A0A0A4" stroke-width="1" />
+  <text x="120" y="255" class="station-title">A  &#8212;  Kesinga Pump Intake</text>
+  <text x="120" y="270" class="station-sub">Tel River Intake  |  Point A</text>
+
+  <!-- PT-01 (Right-aligned numeric data per standard) -->
+  <text x="45" y="300" class="label-title">PT-01</text>
+  <text x="45" y="312" class="label-desc">Pressure Transmitter</text>
+  <text x="160" y="308" id="val-sta-a-pt" class="data-val">0.00</text>
+  <text x="165" y="308" class="data-unit">bar</text>
+
+  <line x1="70" y1="390" x2="70" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="70" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="70" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <!-- FM (Exist.) -->
+  <text x="145" y="345" class="label-title">FM (Exist.)</text>
+  <rect x="135" y="358" width="80" height="22" rx="3" fill="#E0E0E0" stroke="#C0C0C0" />
+  <text x="175" y="373" font-size="9" font-weight="bold" fill="#3F3F3F" text-anchor="middle">SCADA Flow</text>
+  <line x1="175" y1="390" x2="175" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="175" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="175" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+
+  <!-- ================= STATION B: LANJIGARH ROAD ================= -->
+  <rect x="520" y="200" width="160" height="30" rx="4" fill="#3F3F3F" />
+  <text x="600" y="219" class="plc-text">PLC-2 + Edge GSM Module</text>
+
+  <rect x="380" y="234" width="440" height="230" rx="6" fill="#E8E8E8" stroke="#A0A0A4" stroke-width="1" />
+  <text x="600" y="255" class="station-title">B  &#8212;  Lanjigarh Road Pump House</text>
+  <text x="600" y="270" class="station-sub">Intermediate Station  |  Point B</text>
+
+  <!-- PT-02 -->
+  <text x="400" y="300" class="label-title">PT-02</text>
+  <text x="515" y="308" id="val-sta-b-pt2" class="data-val">0.00</text>
+  <text x="520" y="308" class="data-unit">bar</text>
+  <text x="430" y="325" class="side-note">(Inlet side)</text>
+
+  <!-- FM-01 -->
+  <text x="540" y="300" class="label-title">FM-01</text>
+  <text x="660" y="308" class="data-val">0.00</text>
+  <text x="665" y="308" class="data-unit">m3/h</text>
+
+  <!-- PT-03 -->
+  <text x="680" y="300" class="label-title">PT-03</text>
+  <text x="795" y="308" id="val-sta-b-pt3" class="data-val">0.00</text>
+  <text x="800" y="308" class="data-unit">bar</text>
+  <text x="715" y="325" class="side-note">(Discharge)</text>
+
+  <line x1="450" y1="390" x2="450" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="450" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="450" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <line x1="570" y1="390" x2="570" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="570" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="570" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+
+  <line x1="690" y1="390" x2="690" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="690" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="690" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <!-- LT-01 -->
+  <line x1="780" y1="390" x2="780" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="780" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="780" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">LT</text>
+
+  <!-- ================= STATION C: PLANT RESERVOIR ================= -->
+  <rect x="1000" y="200" width="160" height="30" rx="4" fill="#3F3F3F" />
+  <text x="1080" y="219" class="plc-text">PLC-3 + Edge GSM Module</text>
+
+  <rect x="960" y="234" width="230" height="230" rx="6" fill="#E8E8E8" stroke="#A0A0A4" stroke-width="1" />
+  <text x="1075" y="255" class="station-title">C  &#8212;  Lanjigarh Plant Reservoir</text>
+
+  <!-- PT-04 -->
+  <text x="980" y="300" class="label-title">PT-04</text>
+  <text x="1090" y="308" id="val-sta-c-pt" class="data-val">0.00</text>
+  <text x="1095" y="308" class="data-unit">bar</text>
+
+  <line x1="1010" y1="390" x2="1010" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="1010" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="1010" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <line x1="1110" y1="390" x2="1110" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="1110" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="1110" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+
+  <!-- ================= MAIN WATER PIPELINE ================= -->
+  <line x1="15" y1="470" x2="1185" y2="470" stroke="#A0A0A4" stroke-width="3" stroke-linecap="round" />
+  <text x="300" y="460" class="side-note" font-weight="bold">Section A-B  ~35 km  -&gt;</text>
+  <text x="880" y="460" class="side-note" font-weight="bold">Section B-C  ~35 km  -&gt;</text>
+
+  <!-- ================= LEGEND BAR ================= -->
+  <rect x="0" y="500" width="1200" height="110" fill="#E8E8E8" stroke="#D8D8D8" />
+  <text x="20" y="520" font-size="11" font-weight="bold" fill="#3F3F3F">Legend:</text>
+
+  <circle cx="40" cy="545" r="12" fill="#E0E0E0" stroke="#A0A0A4" />
+  <text x="40" y="549" font-size="9" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+  <text x="65" y="548" class="legend-text"><tspan font-weight="bold">PT</tspan> &#8212; Pressure Transmitter + Edge Device (BFAPlee)</text>
+
+  <circle cx="450" cy="545" r="12" fill="#E0E0E0" stroke="#A0A0A4" />
+  <text x="450" y="549" font-size="9" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+  <text x="475" y="548" class="legend-text"><tspan font-weight="bold">FM (Existing)</tspan> &#8212; Vedanta SCADA Flow Meter data integration</text>
+
+  <line x1="450" y1="580" x2="480" y2="580" stroke="#A0A0A4" stroke-width="1" stroke-dasharray="3,3" />
+  <text x="495" y="583" class="legend-text" font-weight="bold">4G / LAN communication link</text>
+
+  <line x1="830" y1="580" x2="860" y2="580" stroke="#A0A0A4" stroke-width="3" />
+  <text x="875" y="583" class="legend-text"><tspan font-weight="bold">28" MS Water Pipeline</tspan> (Gray 160, 3px width)</text>
+
+  <!-- Footer -->
+  <text x="600" y="640" font-size="10" font-style="italic" fill="#64748b" text-anchor="middle">Bharat Flow Analytics Pvt. Ltd.   |   Confidential   |   PlantPAx High-Performance HMI Compliant</text>
+</svg>

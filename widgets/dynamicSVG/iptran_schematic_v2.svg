@@ -1,0 +1,301 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="100%" height="100%" style="background-color: #E0E0E0; font-family: Arial, sans-serif;">
+
+  <style>
+    .header-title { font-size: 24px; font-weight: bold; fill: #3F3F3F; }
+    .header-sub { font-size: 11px; fill: #64748b; }
+    .station-title { font-size: 14px; font-weight: bold; fill: #3F3F3F; text-anchor: middle; }
+    .station-sub { font-size: 10px; font-style: italic; fill: #64748b; text-anchor: middle; }
+    .label-title { font-size: 10px; font-weight: bold; fill: #3F3F3F; }
+    .label-desc { font-size: 9px; fill: #919191; }
+    .side-note { font-size: 10px; font-style: italic; fill: #64748b; text-anchor: middle; }
+    .plc-text { font-size: 11px; font-weight: bold; fill: #FFFFFF; text-anchor: middle; }
+    .data-val { font-size: 11px; font-weight: bold; fill: #475CA7; text-anchor: end; }
+    .data-unit { font-size: 8px; fill: #919191; }
+    .legend-text { font-size: 10px; fill: #3F3F3F; }
+    .pump-sym { cursor: pointer; }
+  </style>
+
+  <!-- FUXA Export Script Hooks -->
+  <script type="text/javascript">
+    //<![CDATA[
+    //!export-start
+    let _ps_stationA_pt = "0.00";    // PT-01 Kesinga intake pressure, bar
+    let _ps_stationB_pt2 = "0.00";   // PT-02 Lanjigarh inlet pressure, bar
+    let _ps_stationB_pt3 = "0.00";    // PT-03 Lanjigarh discharge pressure, bar
+    let _ps_stationC_pt = "0.00";     // PT-04 reservoir pressure, bar
+    let _pn_stationA_flow = 0;        // Station A existing flow meter, m3/h
+    let _pn_stationB_flow = 0;       // FM-01 Lanjigarh flow, m3/h
+    let _pn_stationC_flow = 0;       // Station C reservoir flow, m3/h
+    let _pn_stationB_level = 0;      // LT-01 Lanjigarh tank level, %
+    let _pb_pumpA_run = false;      // Station A pump running feedback
+    let _pb_pumpB_run = false;      // Station B pump running feedback
+    let _pb_pumpA_cmd = false;      // Station A pump start/stop command (click on pump symbol)
+    let _pb_pumpB_cmd = false;      // Station B pump start/stop command (click on pump symbol)
+    let _pb_commA = false;          // Station A edge device comm link online
+    let _pb_commB = false;          // Station B edge device comm link online
+    let _pb_commC = false;          // Station C edge device comm link online
+    //!export-end
+
+    var COL_ALARM = '#E53935';
+    var COL_NORMAL = '#475CA7';
+    var COL_RUN = '#00B050';
+    var COL_STOP = '#A0A0A4';
+
+    function setText(id, txt) {
+      var el = document.getElementById(id);
+      if (el) { el.textContent = txt; }
+    }
+    function setColor(id, color) {
+      var el = document.getElementById(id);
+      if (el) { el.setAttribute('fill', color); }
+    }
+    function setAlarm(id, value, lo, hi) {
+      var n = parseFloat(value);
+      setColor(id, (isNaN(n) || n < lo || n > hi) ? COL_ALARM : COL_NORMAL);
+    }
+    function setPumpState(id, on) {
+      setColor(id, on ? COL_RUN : COL_STOP);
+    }
+    function toBool(v) {
+      return v === true || v === 'true' || v === 1 || v === '1';
+    }
+
+    function putValue(id, value) {
+      if (id === '_ps_stationA_pt') {
+        _ps_stationA_pt = value;
+        setText('iptran-val-a-pt', value);
+        setAlarm('iptran-val-a-pt', value, 0.5, 6.0);
+      } else if (id === '_ps_stationB_pt2') {
+        _ps_stationB_pt2 = value;
+        setText('iptran-val-b-pt2', value);
+        setAlarm('iptran-val-b-pt2', value, 0.5, 6.0);
+      } else if (id === '_ps_stationB_pt3') {
+        _ps_stationB_pt3 = value;
+        setText('iptran-val-b-pt3', value);
+        setAlarm('iptran-val-b-pt3', value, 0.5, 6.0);
+      } else if (id === '_ps_stationC_pt') {
+        _ps_stationC_pt = value;
+        setText('iptran-val-c-pt', value);
+        setAlarm('iptran-val-c-pt', value, 0.5, 6.0);
+      } else if (id === '_pn_stationA_flow') {
+        _pn_stationA_flow = Number(value) || 0;
+        setText('iptran-val-a-fm', _pn_stationA_flow.toFixed(1));
+        setAlarm('iptran-val-a-fm', _pn_stationA_flow, 0, 2000);
+      } else if (id === '_pn_stationB_flow') {
+        _pn_stationB_flow = Number(value) || 0;
+        setText('iptran-val-b-fm', _pn_stationB_flow.toFixed(1));
+        setAlarm('iptran-val-b-fm', _pn_stationB_flow, 0, 2000);
+      } else if (id === '_pn_stationC_flow') {
+        _pn_stationC_flow = Number(value) || 0;
+        setText('iptran-val-c-fm', _pn_stationC_flow.toFixed(1));
+        setAlarm('iptran-val-c-fm', _pn_stationC_flow, 0, 2000);
+      } else if (id === '_pn_stationB_level') {
+        _pn_stationB_level = Number(value) || 0;
+        setText('iptran-val-b-lt', _pn_stationB_level.toFixed(1));
+        setAlarm('iptran-val-b-lt', _pn_stationB_level, 20, 90);
+      } else if (id === '_pb_pumpA_run') {
+        _pb_pumpA_run = toBool(value);
+        setPumpState('iptran-pump-a', _pb_pumpA_run);
+      } else if (id === '_pb_pumpB_run') {
+        _pb_pumpB_run = toBool(value);
+        setPumpState('iptran-pump-b', _pb_pumpB_run);
+      } else if (id === '_pb_commA') {
+        _pb_commA = toBool(value);
+        setColor('iptran-comm-a', _pb_commA ? COL_RUN : COL_ALARM);
+      } else if (id === '_pb_commB') {
+        _pb_commB = toBool(value);
+        setColor('iptran-comm-b', _pb_commB ? COL_RUN : COL_ALARM);
+      } else if (id === '_pb_commC') {
+        _pb_commC = toBool(value);
+        setColor('iptran-comm-c', _pb_commC ? COL_RUN : COL_ALARM);
+      }
+    }
+
+    function togglePumpCmd(id) {
+      if (id === 'iptran-pump-a') {
+        _pb_pumpA_cmd = !_pb_pumpA_cmd;
+        if (typeof postValue === 'function') { postValue('_pb_pumpA_cmd', _pb_pumpA_cmd); }
+      } else if (id === 'iptran-pump-b') {
+        _pb_pumpB_cmd = !_pb_pumpB_cmd;
+        if (typeof postValue === 'function') { postValue('_pb_pumpB_cmd', _pb_pumpB_cmd); }
+      }
+    }
+
+    function iptranInit() {
+      ['iptran-pump-a', 'iptran-pump-b'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('click', function () { togglePumpCmd(id); });
+        }
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', iptranInit);
+    } else {
+      iptranInit();
+    }
+    //]]>
+  </script>
+
+  <!-- ================= HEADER SECTION ================= -->
+  <text x="20" y="28" class="header-title">iPTran Leak Detection System <tspan font-weight="normal" fill="#64748b">&#8212; Instrumentation &amp; Communication Schematic</tspan></text>
+  <text x="20" y="46" class="header-sub">Kesinga-Lanjigarh Water Pipeline | 28" MS | ~70 km | M/s Vedanta Aluminium Metal Ltd., Lanjigarh, Odisha</text>
+  <line x1="20" y1="56" x2="1180" y2="56" stroke="#D8D8D8" stroke-width="1" />
+
+  <!-- ================= CLOUD SERVER ================= -->
+  <rect x="460" y="66" width="280" height="55" rx="6" fill="#3F3F3F" stroke="#A0A0A4" stroke-width="1" />
+  <text x="600" y="88" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">iPTran Cloud Server</text>
+  <text x="600" y="106" font-size="11" fill="#93c5fd" text-anchor="middle">Analytics  &#8226;  Dashboard  &#8226;  Alerts</text>
+
+  <!-- ================= DASHED NETWORK LINES ================= -->
+  <path d="M 120 150 L 1080 150 M 120 150 L 120 200 M 600 121 L 600 200 M 1080 150 L 1080 200"
+        stroke="#A0A0A4" stroke-width="1" stroke-dasharray="4,4" fill="none" />
+  <text x="20" y="144" font-size="11" font-weight="bold" font-style="italic" fill="#3F3F3F">4G / LAN Communication Network</text>
+
+  <!-- Comm link status indicators (bind _pb_commA / _pb_commB / _pb_commC) -->
+  <circle id="iptran-comm-a" cx="120" cy="150" r="5" fill="#A0A0A4" stroke="#3F3F3F" stroke-width="1" />
+  <circle id="iptran-comm-b" cx="600" cy="150" r="5" fill="#A0A0A4" stroke="#3F3F3F" stroke-width="1" />
+  <circle id="iptran-comm-c" cx="1080" cy="150" r="5" fill="#A0A0A4" stroke="#3F3F3F" stroke-width="1" />
+
+  <!-- ================= STATION A: KESINGA ================= -->
+  <rect x="40" y="200" width="160" height="30" rx="4" fill="#3F3F3F" />
+  <text x="120" y="219" class="plc-text">PLC-1 + Edge GSM Module</text>
+
+  <rect x="10" y="234" width="220" height="230" rx="6" fill="#E8E8E8" stroke="#A0A0A4" stroke-width="1" />
+  <text x="120" y="255" class="station-title">A  &#8212;  Kesinga Pump Intake</text>
+  <text x="120" y="270" class="station-sub">Tel River Intake  |  Point A</text>
+
+  <!-- PT-01 -->
+  <text x="45" y="300" class="label-title">PT-01</text>
+  <text x="45" y="312" class="label-desc">Pressure Transmitter</text>
+  <text x="160" y="308" id="iptran-val-a-pt" class="data-val">0.00</text>
+  <text x="165" y="308" class="data-unit">bar</text>
+
+  <line x1="70" y1="390" x2="70" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="70" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="70" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <!-- Pump P-101 (click sends _pb_pumpA_cmd; bind run feedback to _pb_pumpA_run) -->
+  <circle id="iptran-pump-a" class="pump-sym" cx="70" cy="430" r="16" fill="#A0A0A4" stroke="#3F3F3F" stroke-width="1.5" />
+  <text x="70" y="434" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle" pointer-events="none">P</text>
+  <text x="98" y="434" class="label-desc">P-101</text>
+
+  <!-- FM (Exist.) - live value -->
+  <text x="145" y="345" class="label-title">FM (Exist.)</text>
+  <rect x="135" y="358" width="80" height="22" rx="3" fill="#E0E0E0" stroke="#C0C0C0" />
+  <text id="iptran-val-a-fm" x="175" y="373" font-size="9" font-weight="bold" fill="#475CA7" text-anchor="middle">0.0</text>
+  <line x1="175" y1="390" x2="175" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="175" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="175" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+
+  <!-- ================= STATION B: LANJIGARH ROAD ================= -->
+  <rect x="520" y="200" width="160" height="30" rx="4" fill="#3F3F3F" />
+  <text x="600" y="219" class="plc-text">PLC-2 + Edge GSM Module</text>
+
+  <rect x="380" y="234" width="440" height="230" rx="6" fill="#E8E8E8" stroke="#A0A0A4" stroke-width="1" />
+  <text x="600" y="255" class="station-title">B  &#8212;  Lanjigarh Road Pump House</text>
+  <text x="600" y="270" class="station-sub">Intermediate Station  |  Point B</text>
+
+  <!-- PT-02 -->
+  <text x="400" y="300" class="label-title">PT-02</text>
+  <text x="515" y="308" id="iptran-val-b-pt2" class="data-val">0.00</text>
+  <text x="520" y="308" class="data-unit">bar</text>
+  <text x="430" y="325" class="side-note">(Inlet side)</text>
+
+  <!-- FM-01 - live value -->
+  <text x="540" y="300" class="label-title">FM-01</text>
+  <text x="660" y="308" id="iptran-val-b-fm" class="data-val">0.0</text>
+  <text x="665" y="308" class="data-unit">m3/h</text>
+
+  <!-- PT-03 -->
+  <text x="680" y="300" class="label-title">PT-03</text>
+  <text x="795" y="308" id="iptran-val-b-pt3" class="data-val">0.00</text>
+  <text x="800" y="308" class="data-unit">bar</text>
+  <text x="715" y="325" class="side-note">(Discharge)</text>
+
+  <line x1="450" y1="390" x2="450" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="450" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="450" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <line x1="570" y1="390" x2="570" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="570" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="570" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+
+  <!-- Pump P-201 (click sends _pb_pumpB_cmd; bind run feedback to _pb_pumpB_run) -->
+  <circle id="iptran-pump-b" class="pump-sym" cx="690" cy="430" r="16" fill="#A0A0A4" stroke="#3F3F3F" stroke-width="1.5" />
+  <text x="690" y="434" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle" pointer-events="none">P</text>
+  <text x="712" y="434" class="label-desc">P-201</text>
+
+  <line x1="690" y1="390" x2="690" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="690" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="690" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <!-- LT-01 - live value -->
+  <text x="728" y="352" class="label-title">LT-01</text>
+  <text id="iptran-val-b-lt" x="728" y="365" font-size="10" font-weight="bold" fill="#475CA7">0.0</text>
+  <text x="742" y="365" class="data-unit">%</text>
+  <line x1="780" y1="390" x2="780" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="780" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="780" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">LT</text>
+
+  <!-- ================= STATION C: PLANT RESERVOIR ================= -->
+  <rect x="1000" y="200" width="160" height="30" rx="4" fill="#3F3F3F" />
+  <text x="1080" y="219" class="plc-text">PLC-3 + Edge GSM Module</text>
+
+  <rect x="960" y="234" width="230" height="230" rx="6" fill="#E8E8E8" stroke="#A0A0A4" stroke-width="1" />
+  <text x="1075" y="255" class="station-title">C  &#8212;  Lanjigarh Plant Reservoir</text>
+
+  <!-- PT-04 -->
+  <text x="980" y="300" class="label-title">PT-04</text>
+  <text x="1090" y="308" id="iptran-val-c-pt" class="data-val">0.00</text>
+  <text x="1095" y="308" class="data-unit">bar</text>
+
+  <!-- FM - live value -->
+  <text x="980" y="340" class="label-title">FM</text>
+  <text x="1090" y="340" id="iptran-val-c-fm" class="data-val">0.0</text>
+  <text x="1095" y="340" class="data-unit">m3/h</text>
+
+  <line x1="1010" y1="390" x2="1010" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="1010" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="1010" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+
+  <line x1="1110" y1="390" x2="1110" y2="470" stroke="#A0A0A4" stroke-width="1" />
+  <circle cx="1110" cy="370" r="20" fill="#E0E0E0" stroke="#A0A0A4" stroke-width="1" />
+  <text x="1110" y="374" font-size="10" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+
+  <!-- ================= MAIN WATER PIPELINE ================= -->
+  <line x1="15" y1="470" x2="1185" y2="470" stroke="#A0A0A4" stroke-width="3" stroke-linecap="round" />
+  <text x="300" y="460" class="side-note" font-weight="bold">Section A-B  ~35 km  -&gt;</text>
+  <text x="880" y="460" class="side-note" font-weight="bold">Section B-C  ~35 km  -&gt;</text>
+
+  <!-- ================= LEGEND BAR ================= -->
+  <rect x="0" y="500" width="1200" height="110" fill="#E8E8E8" stroke="#D8D8D8" />
+  <text x="20" y="520" font-size="11" font-weight="bold" fill="#3F3F3F">Legend:</text>
+
+  <circle cx="40" cy="545" r="12" fill="#E0E0E0" stroke="#A0A0A4" />
+  <text x="40" y="549" font-size="9" font-weight="bold" fill="#3F3F3F" text-anchor="middle">PT</text>
+  <text x="65" y="548" class="legend-text"><tspan font-weight="bold">PT</tspan> &#8212; Pressure Transmitter + Edge Device (BFAPlee)</text>
+
+  <circle cx="450" cy="545" r="12" fill="#E0E0E0" stroke="#A0A0A4" />
+  <text x="450" y="549" font-size="9" font-weight="bold" fill="#3F3F3F" text-anchor="middle">FM</text>
+  <text x="475" y="548" class="legend-text"><tspan font-weight="bold">FM (Existing)</tspan> &#8212; Vedanta SCADA Flow Meter data integration</text>
+
+  <text x="830" y="548" font-size="10" font-weight="bold" fill="#E53935" text-anchor="end">0.00</text>
+  <text x="838" y="548" class="legend-text">value in alarm range</text>
+
+  <circle cx="40" cy="580" r="10" fill="#00B050" stroke="#3F3F3F" stroke-width="1" />
+  <text x="40" y="584" font-size="9" font-weight="bold" fill="#FFFFFF" text-anchor="middle">P</text>
+  <text x="60" y="583" class="legend-text"><tspan font-weight="bold">Pump</tspan> &#8212; green = running, gray = stopped (click to send start/stop)</text>
+
+  <circle cx="330" cy="580" r="5" fill="#00B050" stroke="#3F3F3F" stroke-width="1" />
+  <text x="345" y="583" class="legend-text"><tspan font-weight="bold">Comm link</tspan> &#8212; green = edge device online, red = link down</text>
+
+  <line x1="620" y1="580" x2="650" y2="580" stroke="#A0A0A4" stroke-width="1" stroke-dasharray="3,3" />
+  <text x="660" y="583" class="legend-text">4G / LAN communication link</text>
+
+  <line x1="830" y1="580" x2="860" y2="580" stroke="#A0A0A4" stroke-width="3" />
+  <text x="875" y="583" class="legend-text"><tspan font-weight="bold">28" MS Water Pipeline</tspan> (Gray 160, 3px width)</text>
+
+  <!-- Footer -->
+  <text x="600" y="640" font-size="10" font-style="italic" fill="#64748b" text-anchor="middle">Bharat Flow Analytics Pvt. Ltd.   |   Confidential   |   PlantPAx High-Performance HMI Compliant   |   Widget v2</text>
+</svg>

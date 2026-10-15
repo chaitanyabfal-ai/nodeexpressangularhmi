@@ -7,5 +7,6 @@ services:
       - './db:/usr/src/app/FUXA/server/_db'
       - './logs:/usr/src/app/FUXA/server/_logs'
       - './images:/usr/src/app/FUXA/server/_images'
+      - './widgets:/usr/src/app/FUXA/server/_widgets'
     ports:
       - '1881:1881'
